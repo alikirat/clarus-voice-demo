@@ -1,0 +1,25 @@
+{
+  "name": "clarus-voice-demo",
+  "version": "1.0.0",
+  "description": "AI phone agent for a demo clinic: verifies callers against FHIR, triages requests with Claude, and escalates urgent calls.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "vitest run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "dotenv": "^18.0.3",
+    "express": "^5.2.1",
+    "twilio": "^6.1.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.0",
+    "vitest": "^5.0.1"
+  }
+}
