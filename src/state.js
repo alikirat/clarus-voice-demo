@@ -1,3 +1,4 @@
+const TTL_MS = 30 * 60 * 1000;
 const calls = new Map();
 
 export function getCall(callSid) {
@@ -10,3 +11,11 @@ export function getCall(callSid) {
 export function endCall(callSid) {
   calls.delete(callSid);
 }
+
+const sweeper = setInterval(() => {
+  const now = Date.now();
+  for (const [sid, call] of calls) {
+    if (now - call.createdAt > TTL_MS) calls.delete(sid);
+  }
+}, 60 * 1000);
+sweeper.unref();
