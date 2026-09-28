@@ -5,6 +5,7 @@ import { extractIdentity, classifyIntent } from './claude.js';
 import { isUrgent } from './urgent.js';
 import { findPatient } from './fhir.js';
 import { getCall, endCall } from './state.js';
+import { parseYesNo } from './yesno.js';
 
 const { VoiceResponse } = twilio.twiml;
 const VOICE = 'Polly.Joanna';
@@ -59,7 +60,7 @@ app.post('/voice', (req, res) => {
     vr,
     '/verify',
     'Hello, and thank you for calling Sunrise Family Clinic. ' +
-      'Please say your first and last name, and your date of birth.'
+    'Please say your first and last name, and your date of birth.'
   );
   send(res, vr);
 });
@@ -69,6 +70,8 @@ app.post('/verify', async (req, res) => {
   const speech = req.body.SpeechResult || '';
   const call = getCall(CallSid);
   const vr = new VoiceResponse();
+
+  if (isUrgent(speech)) return send(res, urgentTransfer(vr, CallSid));
 
   const retryOrTransfer = (retryPrompt) => {
     call.verifyAttempts += 1;
@@ -150,13 +153,35 @@ app.post('/intent', async (req, res) => {
   send(res, listen(vr, '/confirm', `${intent.reply} Is that right?`));
 });
 
-// Temporary placeholder, replaced in Step 8
 app.post('/confirm', (req, res) => {
+  const { CallSid } = req.body;
+  const speech = req.body.SpeechResult || '';
+  const call = getCall(CallSid);
   const vr = new VoiceResponse();
-  vr.say({ voice: VOICE }, 'Thanks. A staff member will follow up with you. Goodbye.');
-  vr.hangup();
-  endCall(req.body.CallSid);
-  send(res, vr);
+
+  if (!call.verified) {
+    vr.redirect({ method: 'POST' }, url('/voice'));
+    return send(res, vr);
+  }
+
+  if (isUrgent(speech)) return send(res, urgentTransfer(vr, CallSid));
+
+  if (parseYesNo(speech) === 'yes') {
+    vr.say(
+      { voice: VOICE },
+      "Great. I've passed your request to our staff, and someone will follow up with you. " +
+      'Thanks for calling Sunrise Family Clinic. Goodbye.'
+    );
+    vr.hangup();
+    endCall(CallSid);
+    return send(res, vr);
+  }
+
+  call.intentAttempts += 1;
+  if (call.intentAttempts < MAX_INTENT_ATTEMPTS) {
+    return send(res, listen(vr, '/intent', 'Sorry about that. Please tell me again how I can help.'));
+  }
+  send(res, transfer(vr, CallSid, 'Let me connect you with a staff member who can help.'));
 });
 
 const port = process.env.PORT || 3000;
