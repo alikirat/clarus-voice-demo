@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import twilio from 'twilio';
 import { extractIdentity } from './claude.js';
+import { findPatient } from './fhir.js';
 
 const { VoiceResponse } = twilio.twiml;
 
@@ -43,16 +44,18 @@ app.post('/verify', async (req, res) => {
 
   try {
     const identity = await extractIdentity(speech);
-    if (identity) {
-      vr.say(
-        { voice: 'Polly.Joanna' },
-        `I heard ${identity.firstName} ${identity.lastName}, born ${identity.birthDate}.`
-      );
-    } else {
+    if (!identity) {
       vr.say({ voice: 'Polly.Joanna' }, "Sorry, I didn't catch all of that.");
+    } else {
+      const patient = await findPatient(identity);
+      if (patient) {
+        vr.say({ voice: 'Polly.Joanna' }, `Thank you, ${identity.firstName}. I found your record.`);
+      } else {
+        vr.say({ voice: 'Polly.Joanna' }, "Sorry, I couldn't find a matching record.");
+      }
     }
   } catch (err) {
-    console.error('extractIdentity failed:', err.message);
+    console.error('verify failed:', err.message);
     vr.say({ voice: 'Polly.Joanna' }, 'Sorry, something went wrong on our end.');
   }
 
