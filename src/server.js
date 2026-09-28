@@ -1,13 +1,15 @@
 import 'dotenv/config';
 import express from 'express';
 import twilio from 'twilio';
-import { extractIdentity } from './claude.js';
+import { extractIdentity, classifyIntent } from './claude.js';
+import { isUrgent } from './urgent.js';
 import { findPatient } from './fhir.js';
 import { getCall, endCall } from './state.js';
 
 const { VoiceResponse } = twilio.twiml;
 const VOICE = 'Polly.Joanna';
 const MAX_VERIFY_ATTEMPTS = 2;
+const MAX_INTENT_ATTEMPTS = 2;
 
 const app = express();
 app.use(express.urlencoded({ extended: false }));
@@ -40,6 +42,14 @@ function transfer(vr, callSid, message) {
   vr.hangup();
   endCall(callSid);
   return vr;
+}
+
+function urgentTransfer(vr, callSid) {
+  return transfer(
+    vr,
+    callSid,
+    "If this is a life threatening emergency, please hang up and dial 9 1 1. I'm connecting you to our on-call team now."
+  );
 }
 
 app.post('/voice', (req, res) => {
@@ -105,10 +115,45 @@ app.post('/verify', async (req, res) => {
   send(res, listen(vr, '/intent', 'Thank you, I found your record. How can I help you today?'));
 });
 
-// Temporary placeholder, replaced in Step 7
-app.post('/intent', (req, res) => {
+app.post('/intent', async (req, res) => {
+  const { CallSid } = req.body;
+  const speech = req.body.SpeechResult || '';
+  const call = getCall(CallSid);
   const vr = new VoiceResponse();
-  vr.say({ voice: VOICE }, `You said: ${req.body.SpeechResult || 'nothing'}. A staff member will follow up. Goodbye.`);
+
+  if (!call.verified) {
+    vr.redirect({ method: 'POST' }, url('/voice'));
+    return send(res, vr);
+  }
+
+  if (isUrgent(speech)) return send(res, urgentTransfer(vr, CallSid));
+
+  if (!speech.trim()) {
+    call.intentAttempts += 1;
+    if (call.intentAttempts < MAX_INTENT_ATTEMPTS) {
+      return send(res, listen(vr, '/intent', "Sorry, I didn't hear anything. How can I help you today?"));
+    }
+    return send(res, transfer(vr, CallSid, 'Let me connect you with a staff member.'));
+  }
+
+  let intent = null;
+  try {
+    intent = await classifyIntent(speech);
+  } catch (err) {
+    console.error('classifyIntent failed:', err.message);
+  }
+
+  if (!intent) return send(res, transfer(vr, CallSid, 'Let me connect you with a staff member.'));
+  if (intent.category === 'urgent') return send(res, urgentTransfer(vr, CallSid));
+
+  call.category = intent.category;
+  send(res, listen(vr, '/confirm', `${intent.reply} Is that right?`));
+});
+
+// Temporary placeholder, replaced in Step 8
+app.post('/confirm', (req, res) => {
+  const vr = new VoiceResponse();
+  vr.say({ voice: VOICE }, 'Thanks. A staff member will follow up with you. Goodbye.');
   vr.hangup();
   endCall(req.body.CallSid);
   send(res, vr);
