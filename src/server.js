@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import twilio from 'twilio';
+import { extractIdentity } from './claude.js';
 
 const { VoiceResponse } = twilio.twiml;
 
@@ -31,14 +32,28 @@ app.post('/voice', (req, res) => {
   res.type('text/xml').send(vr.toString());
 });
 
-app.post('/verify', (req, res) => {
+app.post('/verify', async (req, res) => {
   const vr = new VoiceResponse();
-  const speech = req.body.SpeechResult;
+  const speech = req.body.SpeechResult || '';
 
-  if (speech) {
-    vr.say({ voice: 'Polly.Joanna' }, `You said: ${speech}`);
-  } else {
+  if (!speech.trim()) {
     vr.say({ voice: 'Polly.Joanna' }, "I'm sorry, I didn't hear anything.");
+    return res.type('text/xml').send(vr.toString());
+  }
+
+  try {
+    const identity = await extractIdentity(speech);
+    if (identity) {
+      vr.say(
+        { voice: 'Polly.Joanna' },
+        `I heard ${identity.firstName} ${identity.lastName}, born ${identity.birthDate}.`
+      );
+    } else {
+      vr.say({ voice: 'Polly.Joanna' }, "Sorry, I didn't catch all of that.");
+    }
+  } catch (err) {
+    console.error('extractIdentity failed:', err.message);
+    vr.say({ voice: 'Polly.Joanna' }, 'Sorry, something went wrong on our end.');
   }
 
   res.type('text/xml').send(vr.toString());
