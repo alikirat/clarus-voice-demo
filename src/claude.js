@@ -1,6 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const client = new Anthropic();
+let defaultClient;
+function getClient() {
+  if (!defaultClient) defaultClient = new Anthropic();
+  return defaultClient;
+}
 
 const IDENTITY_PROMPT = `You extract caller identity from a phone speech transcript for a medical clinic.
 Return ONLY a JSON object, no other text:
@@ -10,7 +14,7 @@ Rules:
 - If a field is missing or unclear, use null. Never guess.
 - Capitalize names normally.`;
 
-async function ask(system, userText) {
+async function ask(system, userText, client = getClient()) {
   const res = await client.messages.create({
     model: process.env.ANTHROPIC_MODEL,
     max_tokens: 200,
@@ -49,8 +53,8 @@ export function validateIdentity(obj) {
   return { firstName: firstName.trim(), lastName: lastName.trim(), birthDate };
 }
 
-export async function extractIdentity(transcript) {
-  const text = await ask(IDENTITY_PROMPT, transcript);
+export async function extractIdentity(transcript, client = getClient()) {
+  const text = await ask(IDENTITY_PROMPT, transcript, client);
   return validateIdentity(parseJson(text));
 }
 
@@ -76,7 +80,7 @@ export function validateIntent(obj) {
   return { category, reply };
 }
 
-export async function classifyIntent(transcript) {
-  const text = await ask(INTENT_PROMPT, transcript);
+export async function classifyIntent(transcript, client = getClient()) {
+  const text = await ask(INTENT_PROMPT, transcript, client);
   return validateIntent(parseJson(text));
 }
