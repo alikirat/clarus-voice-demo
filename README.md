@@ -11,7 +11,7 @@ public HAPI FHIR test server.
 
 ## Demo
 
-[![Watch the demo](https://img.youtube.com/vi/aYGwVPTqIp0/hqdefault.jpg)](https://youtu.be/aYGwVPTqIp0)
+[![Watch the demo](docs/demo-thumbnail.png)](https://youtu.be/aYGwVPTqIp0)
 
 Two calls: a routine refill request, and an urgent call that's sent to a
 person before any AI is involved (about 2 minutes).
@@ -19,7 +19,7 @@ person before any AI is involved (about 2 minutes).
 ## How a call works
 
 ```mermaid
-flowchart LR
+flowchart TD
     A[Caller] --> B[Twilio]
     B --> C["/voice: greeting"]
     C --> D["/verify: Claude extracts name + DOB, FHIR lookup"]
